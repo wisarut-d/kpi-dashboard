@@ -34,7 +34,7 @@
 
     <script type="text/babel">
         const { useState, useMemo, useEffect, useRef } = React;
-        const { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } = window.Recharts;
+        const { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Cell } = window.Recharts;
 
         // --- GitHub Config ---
         const REPO_OWNER = "wisarut-d";
@@ -46,6 +46,24 @@
         const FILTER_ORDER = ['Assignee', 'Status', 'Type', 'KPI Task', 'Name Project', 'Priority'];
         const FILTER_LABELS = { 'Assignee': 'ผู้รับผิดชอบ', 'Status': 'สถานะงาน', 'Type': 'ประเภท KPI', 'KPI Task': 'ชื่องาน', 'Name Project': 'โปรเจค', 'Priority': 'ความสำคัญ' };
         const CSV_HEADERS = ['Status', 'Type', 'KPI Task', 'Name Project', 'Detail / Note', 'Assignee', 'Deadline', 'Priority', 'Budget'];
+
+        // เฉดสีสำหรับ Stacked Bar (Type)
+        const CHART_COLORS = [
+            '#6366f1', '#f59e0b', '#f43f5e', '#10b981', 
+            '#0ea5e9', '#8b5cf6', '#f97316', '#d946ef', '#06b6d4'
+        ];
+
+        const TYPE_PALETTES = [
+            'bg-indigo-100 text-indigo-700 border-indigo-200',
+            'bg-amber-100 text-amber-700 border-amber-200',
+            'bg-rose-100 text-rose-700 border-rose-200',
+            'bg-emerald-100 text-emerald-700 border-emerald-200',
+            'bg-sky-100 text-sky-700 border-sky-200',
+            'bg-violet-100 text-violet-700 border-violet-200',
+            'bg-orange-100 text-orange-700 border-orange-200',
+            'bg-fuchsia-100 text-fuchsia-700 border-fuchsia-200',
+            'bg-cyan-100 text-cyan-700 border-cyan-200'
+        ];
 
         const parseCSVFull = (text) => {
             let ret = [], row = [], token = '', inQuotes = false;
@@ -91,61 +109,54 @@
 
             useEffect(() => { fetchData(); }, []);
 
+            const typeColorMap = useMemo(() => {
+                const uniqueTypes = [...new Set(data.map(d => d.Type).filter(t => t && t.trim() !== ''))].sort();
+                const map = {};
+                uniqueTypes.forEach((type, index) => {
+                    map[type] = TYPE_PALETTES[index % TYPE_PALETTES.length];
+                });
+                return map;
+            }, [data]);
+
+            const getTypeStyle = (type) => {
+                const t = (type || '').trim();
+                if (!t) return 'bg-slate-100 text-slate-500 border-slate-200';
+                return typeColorMap[t] || 'bg-slate-100 text-slate-700 border-slate-200';
+            };
+
             const handleFileUpload = async (e) => {
                 const file = e.target.files[0];
                 if (!file) return;
-
                 if (file.name !== "KPI.csv") {
-                    setUploadMsg({ type: 'error', text: 'ปฏิเสธไฟล์: กรุณาใช้ชื่อไฟล์ "KPI.csv" เท่านั้นเพื่อให้ระบบทำงานได้ถูกต้อง' });
+                    setUploadMsg({ type: 'error', text: 'ปฏิเสธไฟล์: กรุณาใช้ชื่อไฟล์ "KPI.csv" เท่านั้น' });
                     fileInputRef.current.value = "";
                     return;
                 }
-
                 const token = prompt("กรุณาใส่ GitHub Personal Access Token เพื่อยืนยันการอัปโหลด:");
                 if (!token) return;
-
                 setIsUploading(true);
                 setUploadMsg({ type: 'info', text: 'กำลังเตรียมการอัปโหลด...' });
-
                 try {
-                    const getFileRes = await fetch(GITHUB_API_URL, {
-                        headers: { 'Authorization': `token ${token}` }
-                    });
-                    if (!getFileRes.ok) throw new Error("ไม่สามารถดึงข้อมูลไฟล์เดิมได้ (ตรวจสอบ Token)");
+                    const getFileRes = await fetch(GITHUB_API_URL, { headers: { 'Authorization': `token ${token}` } });
+                    if (!getFileRes.ok) throw new Error("ไม่สามารถดึงข้อมูลไฟล์เดิมได้");
                     const fileInfo = await getFileRes.json();
                     const currentSha = fileInfo.sha;
-
                     const reader = new FileReader();
                     reader.onload = async (event) => {
                         const content = event.target.result.split(',')[1];
-                        
                         const uploadRes = await fetch(GITHUB_API_URL, {
                             method: 'PUT',
-                            headers: {
-                                'Authorization': `token ${token}`,
-                                'Content-Type': 'application/json',
-                            },
-                            body: JSON.stringify({
-                                message: `Update KPI.csv via Dashboard at ${new Date().toLocaleString()}`,
-                                content: content,
-                                sha: currentSha
-                            })
+                            headers: { 'Authorization': `token ${token}`, 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ message: `Update KPI.csv via Dashboard`, content, sha: currentSha })
                         });
-
                         if (uploadRes.ok) {
-                            setUploadMsg({ type: 'success', text: 'อัปโหลดสำเร็จ! ข้อมูลจะอัปเดตในไม่กี่วินาที' });
+                            setUploadMsg({ type: 'success', text: 'อัปโหลดสำเร็จ!' });
                             setTimeout(() => { setUploadMsg(null); fetchData(); }, 3000);
-                        } else {
-                            throw new Error("GitHub ปฏิเสธการอัปโหลด");
-                        }
+                        } else throw new Error("GitHub ปฏิเสธการอัปโหลด");
                     };
                     reader.readAsDataURL(file);
-                } catch (err) {
-                    setUploadMsg({ type: 'error', text: `เกิดข้อผิดพลาด: ${err.message}` });
-                } finally {
-                    setIsUploading(false);
-                    fileInputRef.current.value = "";
-                }
+                } catch (err) { setUploadMsg({ type: 'error', text: `เกิดข้อผิดพลาด: ${err.message}` }); }
+                finally { setIsUploading(false); fileInputRef.current.value = ""; }
             };
 
             const filterOptions = useMemo(() => {
@@ -161,7 +172,16 @@
                 return data.filter(row => CSV_HEADERS.every(h => !filters[h] || filters[h] === 'All' || row[h] === filters[h]));
             }, [data, filters]);
 
-            const chartData = useMemo(() => {
+            const workloadByTypeStats = useMemo(() => {
+                const counts = {};
+                filteredData.forEach(row => {
+                    const type = row.Type || 'ทั่วไป';
+                    counts[type] = (counts[type] || 0) + 1;
+                });
+                return Object.entries(counts).sort((a, b) => b[1] - a[1]);
+            }, [filteredData]);
+
+            const chartDataStatus = useMemo(() => {
                 const grouped = {};
                 filteredData.forEach(row => {
                     const name = row['Assignee'] || 'ไม่ระบุ';
@@ -175,6 +195,27 @@
                 return Object.values(grouped).sort((a, b) => b.total - a.total).slice(0, 15);
             }, [filteredData]);
 
+            // ข้อมูลกราฟเปรียบเทียบภาระงานแบ่งตาม Type (ประเภท KPI)
+            const chartDataType = useMemo(() => {
+                const grouped = {};
+                const allTypes = [...new Set(filteredData.map(d => d.Type || 'ทั่วไป'))];
+                
+                filteredData.forEach(row => {
+                    const name = row['Assignee'] || 'ไม่ระบุ';
+                    const type = row.Type || 'ทั่วไป';
+                    if (!grouped[name]) {
+                        grouped[name] = { name, total: 0 };
+                        allTypes.forEach(t => grouped[name][t] = 0);
+                    }
+                    grouped[name][type] += 1;
+                    grouped[name].total += 1;
+                });
+                return {
+                    data: Object.values(grouped).sort((a, b) => b.total - a.total).slice(0, 15),
+                    types: allTypes
+                };
+            }, [filteredData]);
+
             const stats = useMemo(() => {
                 const total = filteredData.length;
                 const completed = filteredData.filter(d => d['Status'] && d['Status'].includes('เสร็จ')).length;
@@ -182,57 +223,30 @@
                 return { total, completed, inProgress, rate: total > 0 ? Math.round((completed / total) * 100) : 0 };
             }, [filteredData]);
 
-            if (loading) return <div className="flex flex-col items-center justify-center min-h-screen bg-slate-50 font-bold">กำลังโหลด...</div>;
+            if (loading) return <div className="flex flex-col items-center justify-center min-h-screen bg-slate-50 font-bold text-slate-400 uppercase tracking-widest">Loading...</div>;
 
             return (
                 <div className="min-h-screen bg-slate-50 p-4 md:p-8">
                     <div className="max-w-[1440px] mx-auto space-y-6">
-                        
-                        {/* Header & Upload Section */}
+                        {/* Header */}
                         <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 flex flex-wrap gap-4 justify-between items-center">
                             <div>
                                 <h1 className="text-xl font-bold text-slate-900 uppercase">KPI Dashboard Management</h1>
                                 <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">Connect: {REPO_NAME} / {FILE_PATH}</p>
                             </div>
-                            
                             <div className="flex items-center gap-3">
-                                <input 
-                                    type="file" 
-                                    accept=".csv" 
-                                    className="hidden" 
-                                    ref={fileInputRef} 
-                                    onChange={handleFileUpload} 
-                                />
-                                <button 
-                                    onClick={() => fileInputRef.current.click()}
-                                    disabled={isUploading}
-                                    className="bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-2 rounded-xl text-xs font-bold transition-all shadow-md flex items-center gap-2"
-                                >
-                                    {isUploading ? "กำลังประมวลผล..." : "⬆️ อัปโหลดไฟล์ CSV ใหม่"}
+                                <input type="file" accept=".csv" className="hidden" ref={fileInputRef} onChange={handleFileUpload} />
+                                <button onClick={() => fileInputRef.current.click()} disabled={isUploading} className="bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-2 rounded-xl text-xs font-bold transition-all shadow-md flex items-center gap-2">
+                                    {isUploading ? "กำลังประมวลผล..." : "⬆️ อัปโหลดไฟล์ CSV"}
                                 </button>
                                 <button onClick={fetchData} className="bg-slate-100 hover:bg-slate-200 text-slate-600 px-5 py-2 rounded-xl text-xs font-bold transition-all">รีเฟรชข้อมูล</button>
                             </div>
                         </div>
 
-                        {/* Notification Message */}
-                        {uploadMsg && (
-                            <div className={`p-4 rounded-xl text-xs font-bold shadow-sm border ${
-                                uploadMsg.type === 'error' ? 'bg-red-50 text-red-600 border-red-100' : 
-                                uploadMsg.type === 'success' ? 'bg-emerald-50 text-emerald-600 border-emerald-100' : 
-                                'bg-blue-50 text-blue-600 border-blue-100'
-                            }`}>
-                                {uploadMsg.text}
-                            </div>
-                        )}
+                        {uploadMsg && <div className={`p-4 rounded-xl text-xs font-bold shadow-sm border ${uploadMsg.type === 'error' ? 'bg-red-50 text-red-600 border-red-100' : uploadMsg.type === 'success' ? 'bg-emerald-50 text-emerald-600 border-emerald-100' : 'bg-blue-50 text-blue-600 border-blue-100'}`}>{uploadMsg.text}</div>}
 
-                        {/* Summary Cards */}
                         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-                            {[
-                                {l: "งานทั้งหมด", v: stats.total, c: "text-slate-900"},
-                                {l: "เสร็จสิ้นแล้ว", v: stats.completed, c: "text-emerald-600"},
-                                {l: "กำลังดำเนินการ", v: stats.inProgress, c: "text-amber-500"},
-                                {l: "ความสำเร็จ", v: stats.rate + "%", c: "text-indigo-600"}
-                            ].map((s, i) => (
+                            {[ {l: "งานทั้งหมด", v: stats.total, c: "text-slate-900"}, {l: "เสร็จสิ้นแล้ว", v: stats.completed, c: "text-emerald-600"}, {l: "กำลังดำเนินการ", v: stats.inProgress, c: "text-amber-500"}, {l: "ความสำเร็จ", v: stats.rate + "%", c: "text-indigo-600"} ].map((s, i) => (
                                 <div key={i} className="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm">
                                     <p className="text-[11px] font-bold text-slate-400 mb-1">{s.l}</p>
                                     <h3 className={`text-2xl font-black ${s.c}`}>{s.v}</h3>
@@ -241,18 +255,14 @@
                         </div>
 
                         <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
-                            {/* Filters Sidebar */}
-                            <div className="lg:col-span-1">
+                            <div className="lg:col-span-1 space-y-6">
+                                {/* ตัวกรอง */}
                                 <div className="bg-white p-5 rounded-2xl shadow-sm border border-slate-100">
                                     <h3 className="text-[11px] font-black uppercase text-slate-400 mb-6 tracking-widest border-b pb-2">ตัวกรอง</h3>
                                     {FILTER_ORDER.map(header => (
                                         <div key={header} className="mb-5">
                                             <label className="text-[12px] font-bold text-slate-600 mb-1.5 block">{FILTER_LABELS[header]}</label>
-                                            <select 
-                                                className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-[13px] font-medium"
-                                                value={filters[header] || 'All'}
-                                                onChange={(e) => setFilters({...filters, [header]: e.target.value})}
-                                            >
+                                            <select className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-[13px] font-medium" value={filters[header] || 'All'} onChange={(e) => setFilters({...filters, [header]: e.target.value})}>
                                                 {(filterOptions[header] || []).map(opt => (
                                                     <option key={opt} value={opt}>{opt === 'All' ? '-- ทั้งหมด --' : opt}</option>
                                                 ))}
@@ -261,16 +271,31 @@
                                     ))}
                                     <button onClick={() => setFilters({})} className="w-full py-2.5 text-[11px] font-bold text-indigo-600 bg-indigo-50 rounded-xl hover:bg-indigo-100 uppercase tracking-widest transition-colors">ล้างตัวกรอง</button>
                                 </div>
+
+                                {/* สรุปภาระงานแบ่งตามประเภท KPI */}
+                                <div className="bg-white p-5 rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
+                                    <h3 className="text-[11px] font-black uppercase text-slate-400 mb-5 tracking-widest border-b pb-2">ภาระงานตามประเภท KPI</h3>
+                                    <div className="space-y-3">
+                                        {workloadByTypeStats.map(([type, count]) => (
+                                            <div key={type} className="flex items-center justify-between group">
+                                                <div className="flex items-center gap-2">
+                                                    <div className={`w-2 h-2 rounded-full ${getTypeStyle(type).split(' ')[0]}`}></div>
+                                                    <span className="text-[12px] font-bold text-slate-600 group-hover:text-slate-900 transition-colors">{type}</span>
+                                                </div>
+                                                <span className="text-[12px] font-black text-slate-400 bg-slate-50 px-2 py-0.5 rounded-lg border border-slate-100 group-hover:text-indigo-600 transition-colors">{count} งาน</span>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
                             </div>
 
-                            {/* Main Content */}
                             <div className="lg:col-span-3 space-y-6">
-                                {/* Chart */}
+                                {/* แผนภูมิ Status */}
                                 <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
-                                    <h3 className="text-[11px] font-bold uppercase text-slate-400 mb-6 tracking-widest">เปรียบเทียบภาระงานรายบุคคล</h3>
-                                    <div className="h-[300px] w-full">
+                                    <h3 className="text-[11px] font-bold uppercase text-slate-400 mb-6 tracking-widest">เปรียบเทียบภาระงานตามสถานะ (Status)</h3>
+                                    <div className="h-[280px] w-full">
                                         <ResponsiveContainer width="100%" height="100%">
-                                            <BarChart data={chartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                                            <BarChart data={chartDataStatus} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
                                                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
                                                 <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fill: '#64748b', fontSize: 11}} dy={10} />
                                                 <YAxis axisLine={false} tickLine={false} tick={{fill: '#94a3b8', fontSize: 11}} />
@@ -284,43 +309,72 @@
                                     </div>
                                 </div>
 
-                                {/* Table */}
+                                {/* ใหม่: แผนภูมิ Type */}
+                                <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
+                                    <h3 className="text-[11px] font-bold uppercase text-slate-400 mb-6 tracking-widest">เปรียบเทียบภาระงานตามประเภท KPI (Type)</h3>
+                                    <div className="h-[280px] w-full">
+                                        <ResponsiveContainer width="100%" height="100%">
+                                            <BarChart data={chartDataType.data} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                                                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                                                <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fill: '#64748b', fontSize: 11}} dy={10} />
+                                                <YAxis axisLine={false} tickLine={false} tick={{fill: '#94a3b8', fontSize: 11}} />
+                                                <Tooltip cursor={{fill: '#f8fafc'}} contentStyle={{borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)', fontSize: '13px'}} />
+                                                <Legend wrapperStyle={{paddingTop: '20px', fontSize: '11px', fontWeight: 600}} />
+                                                {chartDataType.types.map((type, index) => (
+                                                    <Bar 
+                                                        key={type} 
+                                                        dataKey={type} 
+                                                        stackId="b" 
+                                                        fill={CHART_COLORS[index % CHART_COLORS.length]}
+                                                        radius={index === chartDataType.types.length - 1 ? [4, 4, 0, 0] : [0, 0, 0, 0]} 
+                                                    />
+                                                ))}
+                                            </BarChart>
+                                        </ResponsiveContainer>
+                                    </div>
+                                </div>
+
                                 <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
                                     <div className="overflow-x-auto custom-scrollbar">
-                                        <table className="w-full text-left border-collapse min-w-[850px]">
+                                        <table className="w-full text-left border-collapse min-w-[900px]">
                                             <thead>
                                                 <tr className="bg-slate-50 text-[11px] font-bold text-slate-400 uppercase border-b border-slate-100">
-                                                    <th className="p-4 pl-6 w-[160px]">สถานะ</th>
+                                                    <th className="p-4 pl-6 w-[150px]">สถานะ</th>
+                                                    <th className="p-4 w-[140px]">ประเภท</th>
                                                     <th className="p-4">รายละเอียดงาน & โปรเจค</th>
                                                     <th className="p-4 w-[150px]">ผู้รับผิดชอบ</th>
-                                                    <th className="p-4 text-right pr-6 w-[120px]">ความสำคัญ</th>
+                                                    <th className="p-4 text-right pr-6 w-[110px]">ลำดับ</th>
                                                 </tr>
                                             </thead>
                                             <tbody className="divide-y divide-slate-50">
                                                 {filteredData.map((row, idx) => (
                                                     <tr key={idx} className="hover:bg-slate-50/50 transition-colors group">
                                                         <td className="p-4 pl-6">
-                                                            <span className={`status-badge px-2.5 py-1 rounded-lg text-[10px] font-bold border ${
-                                                                (row.Status || '').includes('เสร็จ') ? 'bg-emerald-50 text-emerald-600 border-emerald-100' : 'bg-amber-50 text-amber-600 border-amber-100'
-                                                            }`}>
+                                                            <span className={`status-badge px-2.5 py-1 rounded-lg text-[10px] font-bold border ${ (row.Status || '').includes('เสร็จ') ? 'bg-emerald-50 text-emerald-600 border-emerald-100' : 'bg-amber-50 text-amber-600 border-amber-100' }`}>
                                                                 {row.Status || 'N/A'}
                                                             </span>
                                                         </td>
                                                         <td className="p-4">
-                                                            <div className="text-[14px] font-semibold text-slate-800">{row['KPI Task']}</div>
+                                                            <span className={`text-[10px] font-bold px-2.5 py-1 rounded border uppercase ${getTypeStyle(row.Type)}`}>
+                                                                {row.Type || 'ทั่วไป'}
+                                                            </span>
+                                                        </td>
+                                                        <td className="p-4">
+                                                            <div className="text-[14px] font-semibold text-slate-800 leading-tight">{row['KPI Task']}</div>
                                                             {row['Name Project'] && (
-                                                                <div className="inline-flex items-center px-2 py-0.5 mt-1 bg-slate-100 text-slate-500 text-[10px] font-bold rounded uppercase tracking-wide">
-                                                                    📁 {row['Name Project']}
+                                                                <div className="text-[14px] font-medium text-slate-500 mt-1 uppercase tracking-wide">
+                                                                    {row['Name Project']}
                                                                 </div>
                                                             )}
                                                         </td>
                                                         <td className="p-4">
-                                                            <span className="text-[13px] font-bold text-slate-700">{row.Assignee || 'ไม่ระบุ'}</span>
+                                                            <div className="flex items-center gap-2">
+                                                                <div className={`w-2 h-2 rounded-full ${getTypeStyle(row.Type).split(' ')[0]}`}></div>
+                                                                <span className="text-[13px] font-bold text-slate-700">{row.Assignee || 'ไม่ระบุ'}</span>
+                                                            </div>
                                                         </td>
                                                         <td className="p-4 text-right pr-6">
-                                                            <span className="text-[11px] font-bold text-slate-400 bg-slate-50 px-2.5 py-1 rounded-md border border-slate-200">
-                                                                {row.Priority || 'NORMAL'}
-                                                            </span>
+                                                            <span className="text-[10px] font-bold text-slate-400">{row.Priority || 'NORMAL'}</span>
                                                         </td>
                                                     </tr>
                                                 ))}
