@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>KPI Task Dashboard - GitHub Live</title>
+    <title>KPI Task Dashboard - GitHub Live & Upload</title>
     
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
@@ -15,234 +15,311 @@
 
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;500;600;700&display=swap');
-        body { font-family: 'Sarabun', sans-serif; }
+        
+        :root { --font-main: 'Sarabun', sans-serif; }
+        body { 
+            font-family: var(--font-main);
+            -webkit-font-smoothing: antialiased;
+            text-rendering: optimizeLegibility;
+        }
+        * { line-height: 1.6 !important; }
         .custom-scrollbar::-webkit-scrollbar { width: 6px; height: 6px; }
-        .custom-scrollbar::-webkit-scrollbar-track { background: #f1f5f9; border-radius: 4px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: #f1f5f9; }
         .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
-        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+        .status-badge { white-space: nowrap; display: inline-block; }
     </style>
 </head>
 <body>
     <div id="root"></div>
 
     <script type="text/babel">
-        const { useState, useMemo, useEffect } = React;
-        const Recharts = window.Recharts || {};
-        const { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } = Recharts;
+        const { useState, useMemo, useEffect, useRef } = React;
+        const { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } = window.Recharts;
 
-        // --- ตั้งค่า GITHUB URL ตรงนี้ ---
-        // เปลี่ยน URL นี้เป็น Raw URL จาก GitHub ของคุณ
-        const GITHUB_CSV_URL = "https://raw.githubusercontent.com/YOUR_USERNAME/YOUR_REPO/main/2025%2010%2020%20KPI%202568_%E0%B8%AA%E0%B8%A8%E0%B8%B2%E0%B8%9B%E0%B8%B1%E0%B8%95%E0%B8%A2%E0%B9%8C.csv";
+        // --- GitHub Config ---
+        const REPO_OWNER = "wisarut-d";
+        const REPO_NAME = "kpi-dashboard";
+        const FILE_PATH = "KPI.csv";
+        const GITHUB_RAW_URL = `https://raw.githubusercontent.com/${REPO_OWNER}/${REPO_NAME}/main/${FILE_PATH}`;
+        const GITHUB_API_URL = `https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/contents/${FILE_PATH}`;
 
-        const CSV_HEADERS = [
-            'Status', 'Type', 'KPI Task', 'Name Project', 
-            'Detail / Note', 'Assignee', 'Deadline', 'Priority', 'Budget'
-        ];
-
-        const FILTER_LABELS = {
-            'Status': 'สถานะงาน',
-            'Type': 'ประเภท KPI',
-            'KPI Task': 'ชื่องาน',
-            'Name Project': 'โปรเจค',
-            'Assignee': 'ผู้รับผิดชอบ',
-            'Priority': 'ความสำคัญ'
-        };
+        const FILTER_ORDER = ['Assignee', 'Status', 'Type', 'KPI Task', 'Name Project', 'Priority'];
+        const FILTER_LABELS = { 'Assignee': 'ผู้รับผิดชอบ', 'Status': 'สถานะงาน', 'Type': 'ประเภท KPI', 'KPI Task': 'ชื่องาน', 'Name Project': 'โปรเจค', 'Priority': 'ความสำคัญ' };
+        const CSV_HEADERS = ['Status', 'Type', 'KPI Task', 'Name Project', 'Detail / Note', 'Assignee', 'Deadline', 'Priority', 'Budget'];
 
         const parseCSVFull = (text) => {
             let ret = [], row = [], token = '', inQuotes = false;
             for (let i = 0; i < text.length; i++) {
-                let c = text[i];
-                let nextC = text[i+1];
-                if (c === '"') {
-                    if (inQuotes && nextC === '"') { token += '"'; i++; } else { inQuotes = !inQuotes; }
-                } else if (c === ',' && !inQuotes) {
-                    row.push(token); token = '';
-                } else if ((c === '\n' || c === '\r') && !inQuotes) {
+                let c = text[i]; let nextC = text[i+1];
+                if (c === '"') { if (inQuotes && nextC === '"') { token += '"'; i++; } else { inQuotes = !inQuotes; } }
+                else if (c === ',' && !inQuotes) { row.push(token); token = ''; }
+                else if ((c === '\n' || c === '\r') && !inQuotes) {
                     if (c === '\r' && nextC === '\n') i++;
-                    row.push(token);
-                    if (row.some(val => val.trim() !== '')) ret.push(row);
+                    row.push(token); if (row.some(val => val.trim() !== '')) ret.push(row);
                     row = []; token = '';
                 } else { token += c; }
             }
-            if (token || row.length > 0) {
-                row.push(token);
-                if (row.some(val => val.trim() !== '')) ret.push(row);
-            }
+            if (token || row.length > 0) { row.push(token); if (row.some(val => val.trim() !== '')) ret.push(row); }
             return ret;
         };
 
         function App() {
             const [data, setData] = useState([]);
             const [loading, setLoading] = useState(true);
-            const [error, setError] = useState(null);
             const [filters, setFilters] = useState({});
+            const [isUploading, setIsUploading] = useState(false);
+            const [uploadMsg, setUploadMsg] = useState(null);
+            const fileInputRef = useRef(null);
 
-            const fetchDataFromGithub = async () => {
+            const fetchData = async () => {
                 setLoading(true);
-                setError(null);
                 try {
-                    // ป้องกันการ Cache โดยการเติม Timestamp ต่อท้าย URL
-                    const response = await fetch(`${GITHUB_CSV_URL}?t=${new Date().getTime()}`);
-                    if (!response.ok) throw new Error("ไม่สามารถดึงข้อมูลจาก GitHub ได้");
+                    const response = await fetch(`${GITHUB_RAW_URL}?t=${new Date().getTime()}`);
                     const csvText = await response.text();
-                    
                     const parsedRows = parseCSVFull(csvText);
                     if (parsedRows.length === 0) return;
-                    
-                    const headersFromCsv = parsedRows[0].map(h => h.trim());
+                    const headers = parsedRows[0].map(h => h.trim());
                     const parsedData = parsedRows.slice(1).map(row => {
                         const obj = {};
-                        headersFromCsv.forEach((h, i) => { if(h) obj[h] = row[i] ? row[i].trim() : ''; });
+                        headers.forEach((h, i) => { if(h) obj[h] = row[i] ? row[i].trim() : ''; });
                         return obj;
                     }).filter(row => row['Status'] || row['KPI Task']);
-
                     setData(parsedData);
-                    setLoading(false);
-                } catch (err) {
-                    setError(err.message);
-                    setLoading(false);
-                }
+                } catch (err) { console.error(err); }
+                setLoading(false);
             };
 
-            useEffect(() => {
-                fetchDataFromGithub();
-            }, []);
+            useEffect(() => { fetchData(); }, []);
+
+            const handleFileUpload = async (e) => {
+                const file = e.target.files[0];
+                if (!file) return;
+
+                if (file.name !== "KPI.csv") {
+                    setUploadMsg({ type: 'error', text: 'ปฏิเสธไฟล์: กรุณาใช้ชื่อไฟล์ "KPI.csv" เท่านั้นเพื่อให้ระบบทำงานได้ถูกต้อง' });
+                    fileInputRef.current.value = "";
+                    return;
+                }
+
+                const token = prompt("กรุณาใส่ GitHub Personal Access Token เพื่อยืนยันการอัปโหลด:");
+                if (!token) return;
+
+                setIsUploading(true);
+                setUploadMsg({ type: 'info', text: 'กำลังเตรียมการอัปโหลด...' });
+
+                try {
+                    const getFileRes = await fetch(GITHUB_API_URL, {
+                        headers: { 'Authorization': `token ${token}` }
+                    });
+                    if (!getFileRes.ok) throw new Error("ไม่สามารถดึงข้อมูลไฟล์เดิมได้ (ตรวจสอบ Token)");
+                    const fileInfo = await getFileRes.json();
+                    const currentSha = fileInfo.sha;
+
+                    const reader = new FileReader();
+                    reader.onload = async (event) => {
+                        const content = event.target.result.split(',')[1];
+                        
+                        const uploadRes = await fetch(GITHUB_API_URL, {
+                            method: 'PUT',
+                            headers: {
+                                'Authorization': `token ${token}`,
+                                'Content-Type': 'application/json',
+                            },
+                            body: JSON.stringify({
+                                message: `Update KPI.csv via Dashboard at ${new Date().toLocaleString()}`,
+                                content: content,
+                                sha: currentSha
+                            })
+                        });
+
+                        if (uploadRes.ok) {
+                            setUploadMsg({ type: 'success', text: 'อัปโหลดสำเร็จ! ข้อมูลจะอัปเดตในไม่กี่วินาที' });
+                            setTimeout(() => { setUploadMsg(null); fetchData(); }, 3000);
+                        } else {
+                            throw new Error("GitHub ปฏิเสธการอัปโหลด");
+                        }
+                    };
+                    reader.readAsDataURL(file);
+                } catch (err) {
+                    setUploadMsg({ type: 'error', text: `เกิดข้อผิดพลาด: ${err.message}` });
+                } finally {
+                    setIsUploading(false);
+                    fileInputRef.current.value = "";
+                }
+            };
 
             const filterOptions = useMemo(() => {
                 const options = {};
                 CSV_HEADERS.forEach(header => {
-                    let validValues = data.map(d => d[header]).filter(v => v !== undefined && v !== '');
-                    if (header === 'Status') validValues = validValues.filter(v => v.length <= 30 && !v.includes('\n'));
-                    if (header === 'Type') validValues = validValues.filter(v => v.length <= 50 && !v.toLowerCase().includes('vietnam'));
+                    let validValues = data.map(d => d[header]).filter(v => v);
                     options[header] = ['All', ...new Set(validValues)].sort();
                 });
                 return options;
             }, [data]);
 
             const filteredData = useMemo(() => {
-                return data.filter(row => {
-                    return CSV_HEADERS.every(header => {
-                        return !filters[header] || filters[header] === 'All' || row[header] === filters[header];
-                    });
-                });
+                return data.filter(row => CSV_HEADERS.every(h => !filters[h] || filters[h] === 'All' || row[h] === filters[h]));
             }, [data, filters]);
+
+            const chartData = useMemo(() => {
+                const grouped = {};
+                filteredData.forEach(row => {
+                    const name = row['Assignee'] || 'ไม่ระบุ';
+                    const status = row['Status'] || 'อื่นๆ';
+                    if (!grouped[name]) grouped[name] = { name, 'เสร็จแล้ว': 0, 'กำลังดำเนินการ': 0, 'อื่นๆ': 0, total: 0 };
+                    grouped[name].total += 1;
+                    if (status.includes('เสร็จ')) grouped[name]['เสร็จแล้ว'] += 1;
+                    else if (status.includes('ดำเนินการ')) grouped[name]['กำลังดำเนินการ'] += 1;
+                    else grouped[name]['อื่นๆ'] += 1;
+                });
+                return Object.values(grouped).sort((a, b) => b.total - a.total).slice(0, 15);
+            }, [filteredData]);
 
             const stats = useMemo(() => {
                 const total = filteredData.length;
                 const completed = filteredData.filter(d => d['Status'] && d['Status'].includes('เสร็จ')).length;
-                const inProgress = filteredData.filter(d => d['Status'] && d['Status'].includes('กำลังดำเนินการ')).length;
-                return { total, completed, inProgress, completionRate: total > 0 ? Math.round((completed / total) * 100) : 0 };
+                const inProgress = filteredData.filter(d => d['Status'] && d['Status'].includes('ดำเนินการ')).length;
+                return { total, completed, inProgress, rate: total > 0 ? Math.round((completed / total) * 100) : 0 };
             }, [filteredData]);
 
-            if (loading) return (
-                <div className="flex flex-col items-center justify-center min-h-screen bg-slate-50">
-                    <div className="w-12 h-12 border-4 border-indigo-200 border-t-indigo-600 rounded-full animate-spin"></div>
-                    <p className="mt-4 text-slate-600 font-medium">กำลังดึงข้อมูลล่าสุดจาก GitHub...</p>
-                </div>
-            );
+            if (loading) return <div className="flex flex-col items-center justify-center min-h-screen bg-slate-50 font-bold">กำลังโหลด...</div>;
 
             return (
                 <div className="min-h-screen bg-slate-50 p-4 md:p-8">
-                    <div className="max-w-[1400px] mx-auto space-y-6">
+                    <div className="max-w-[1440px] mx-auto space-y-6">
                         
-                        <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 flex flex-col md:flex-row justify-between items-center gap-4">
+                        {/* Header & Upload Section */}
+                        <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 flex flex-wrap gap-4 justify-between items-center">
                             <div>
-                                <h1 className="text-2xl font-bold text-slate-900">KPI Live Dashboard</h1>
-                                <p className="text-sm text-slate-500">ข้อมูลเชื่อมต่อโดยตรงกับไฟล์บน GitHub</p>
+                                <h1 className="text-xl font-bold text-slate-900 uppercase">KPI Dashboard Management</h1>
+                                <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">Connect: {REPO_NAME} / {FILE_PATH}</p>
                             </div>
-                            <button 
-                                onClick={fetchDataFromGithub}
-                                className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-xl text-sm font-medium transition-all shadow-sm flex items-center gap-2"
-                            >
-                                🔄 อัปเดตข้อมูลตอนนี้
-                            </button>
+                            
+                            <div className="flex items-center gap-3">
+                                <input 
+                                    type="file" 
+                                    accept=".csv" 
+                                    className="hidden" 
+                                    ref={fileInputRef} 
+                                    onChange={handleFileUpload} 
+                                />
+                                <button 
+                                    onClick={() => fileInputRef.current.click()}
+                                    disabled={isUploading}
+                                    className="bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-2 rounded-xl text-xs font-bold transition-all shadow-md flex items-center gap-2"
+                                >
+                                    {isUploading ? "กำลังประมวลผล..." : "⬆️ อัปโหลดไฟล์ CSV ใหม่"}
+                                </button>
+                                <button onClick={fetchData} className="bg-slate-100 hover:bg-slate-200 text-slate-600 px-5 py-2 rounded-xl text-xs font-bold transition-all">รีเฟรชข้อมูล</button>
+                            </div>
                         </div>
 
-                        {error && (
-                            <div className="bg-red-50 border border-red-200 text-red-700 p-4 rounded-xl text-sm flex items-center gap-2">
-                                ⚠️ {error} (โปรดตรวจสอบ URL ในโค้ด)
+                        {/* Notification Message */}
+                        {uploadMsg && (
+                            <div className={`p-4 rounded-xl text-xs font-bold shadow-sm border ${
+                                uploadMsg.type === 'error' ? 'bg-red-50 text-red-600 border-red-100' : 
+                                uploadMsg.type === 'success' ? 'bg-emerald-50 text-emerald-600 border-emerald-100' : 
+                                'bg-blue-50 text-blue-600 border-blue-100'
+                            }`}>
+                                {uploadMsg.text}
                             </div>
                         )}
 
-                        {/* Stats Cards */}
-                        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                            <div className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm">
-                                <p className="text-xs font-bold text-slate-400 uppercase">งานทั้งหมด</p>
-                                <h3 className="text-2xl font-bold text-slate-900">{stats.total}</h3>
-                            </div>
-                            <div className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm">
-                                <p className="text-xs font-bold text-emerald-500 uppercase">เสร็จแล้ว</p>
-                                <h3 className="text-2xl font-bold text-slate-900">{stats.completed}</h3>
-                            </div>
-                            <div className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm">
-                                <p className="text-xs font-bold text-amber-500 uppercase">กำลังทำ</p>
-                                <h3 className="text-2xl font-bold text-slate-900">{stats.inProgress}</h3>
-                            </div>
-                            <div className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm">
-                                <p className="text-xs font-bold text-indigo-500 uppercase">ความสำเร็จ</p>
-                                <h3 className="text-2xl font-bold text-slate-900">{stats.completionRate}%</h3>
-                            </div>
+                        {/* Summary Cards */}
+                        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                            {[
+                                {l: "งานทั้งหมด", v: stats.total, c: "text-slate-900"},
+                                {l: "เสร็จสิ้นแล้ว", v: stats.completed, c: "text-emerald-600"},
+                                {l: "กำลังดำเนินการ", v: stats.inProgress, c: "text-amber-500"},
+                                {l: "ความสำเร็จ", v: stats.rate + "%", c: "text-indigo-600"}
+                            ].map((s, i) => (
+                                <div key={i} className="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm">
+                                    <p className="text-[11px] font-bold text-slate-400 mb-1">{s.l}</p>
+                                    <h3 className={`text-2xl font-black ${s.c}`}>{s.v}</h3>
+                                </div>
+                            ))}
                         </div>
 
                         <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
-                            {/* Filter Side */}
-                            <div className="lg:col-span-1 space-y-4">
-                                <div className="bg-white p-5 rounded-2xl shadow-sm border border-slate-100 overflow-y-auto max-h-[80vh] custom-scrollbar">
-                                    <h3 className="font-bold mb-4 text-slate-800">ตัวกรองข้อมูล</h3>
-                                    {Object.keys(FILTER_LABELS).map(header => (
-                                        <div key={header} className="mb-4">
-                                            <label className="text-xs font-bold text-slate-500 mb-1 block">{FILTER_LABELS[header]}</label>
+                            {/* Filters Sidebar */}
+                            <div className="lg:col-span-1">
+                                <div className="bg-white p-5 rounded-2xl shadow-sm border border-slate-100">
+                                    <h3 className="text-[11px] font-black uppercase text-slate-400 mb-6 tracking-widest border-b pb-2">ตัวกรอง</h3>
+                                    {FILTER_ORDER.map(header => (
+                                        <div key={header} className="mb-5">
+                                            <label className="text-[12px] font-bold text-slate-600 mb-1.5 block">{FILTER_LABELS[header]}</label>
                                             <select 
-                                                className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2 text-sm outline-none"
+                                                className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-[13px] font-medium"
                                                 value={filters[header] || 'All'}
                                                 onChange={(e) => setFilters({...filters, [header]: e.target.value})}
                                             >
-                                                {filterOptions[header] && filterOptions[header].map(opt => (
+                                                {(filterOptions[header] || []).map(opt => (
                                                     <option key={opt} value={opt}>{opt === 'All' ? '-- ทั้งหมด --' : opt}</option>
                                                 ))}
                                             </select>
                                         </div>
                                     ))}
-                                    <button 
-                                        onClick={() => setFilters({})}
-                                        className="w-full py-2 text-sm text-indigo-600 font-bold bg-indigo-50 rounded-lg hover:bg-indigo-100"
-                                    >
-                                        ล้างตัวกรอง
-                                    </button>
+                                    <button onClick={() => setFilters({})} className="w-full py-2.5 text-[11px] font-bold text-indigo-600 bg-indigo-50 rounded-xl hover:bg-indigo-100 uppercase tracking-widest transition-colors">ล้างตัวกรอง</button>
                                 </div>
                             </div>
 
-                            {/* Data Table Side */}
-                            <div className="lg:col-span-3">
+                            {/* Main Content */}
+                            <div className="lg:col-span-3 space-y-6">
+                                {/* Chart */}
+                                <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
+                                    <h3 className="text-[11px] font-bold uppercase text-slate-400 mb-6 tracking-widest">เปรียบเทียบภาระงานรายบุคคล</h3>
+                                    <div className="h-[300px] w-full">
+                                        <ResponsiveContainer width="100%" height="100%">
+                                            <BarChart data={chartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                                                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                                                <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fill: '#64748b', fontSize: 11}} dy={10} />
+                                                <YAxis axisLine={false} tickLine={false} tick={{fill: '#94a3b8', fontSize: 11}} />
+                                                <Tooltip cursor={{fill: '#f8fafc'}} contentStyle={{borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)', fontSize: '13px'}} />
+                                                <Legend wrapperStyle={{paddingTop: '20px', fontSize: '11px', fontWeight: 600}} />
+                                                <Bar dataKey="เสร็จแล้ว" stackId="a" fill="#10b981" />
+                                                <Bar dataKey="กำลังดำเนินการ" stackId="a" fill="#f59e0b" />
+                                                <Bar dataKey="อื่นๆ" stackId="a" fill="#3b82f6" radius={[4, 4, 0, 0]} />
+                                            </BarChart>
+                                        </ResponsiveContainer>
+                                    </div>
+                                </div>
+
+                                {/* Table */}
                                 <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
                                     <div className="overflow-x-auto custom-scrollbar">
-                                        <table className="w-full text-left border-collapse min-w-[800px]">
+                                        <table className="w-full text-left border-collapse min-w-[850px]">
                                             <thead>
-                                                <tr className="bg-slate-50 text-slate-500 text-[10px] uppercase font-bold tracking-widest border-b border-slate-100">
-                                                    <th className="p-4">Status</th>
-                                                    <th className="p-4">ชื่องาน / โปรเจค</th>
-                                                    <th className="p-4">ผู้รับผิดชอบ</th>
-                                                    <th className="p-4">ความสำคัญ</th>
+                                                <tr className="bg-slate-50 text-[11px] font-bold text-slate-400 uppercase border-b border-slate-100">
+                                                    <th className="p-4 pl-6 w-[160px]">สถานะ</th>
+                                                    <th className="p-4">รายละเอียดงาน & โปรเจค</th>
+                                                    <th className="p-4 w-[150px]">ผู้รับผิดชอบ</th>
+                                                    <th className="p-4 text-right pr-6 w-[120px]">ความสำคัญ</th>
                                                 </tr>
                                             </thead>
                                             <tbody className="divide-y divide-slate-50">
                                                 {filteredData.map((row, idx) => (
-                                                    <tr key={idx} className="hover:bg-slate-50/50 transition-colors">
-                                                        <td className="p-4">
-                                                            <span className={`px-2 py-1 rounded-md text-[10px] font-bold border ${
-                                                                row.Status.includes('เสร็จ') ? 'bg-emerald-50 text-emerald-600 border-emerald-100' : 'bg-amber-50 text-amber-600 border-amber-100'
+                                                    <tr key={idx} className="hover:bg-slate-50/50 transition-colors group">
+                                                        <td className="p-4 pl-6">
+                                                            <span className={`status-badge px-2.5 py-1 rounded-lg text-[10px] font-bold border ${
+                                                                (row.Status || '').includes('เสร็จ') ? 'bg-emerald-50 text-emerald-600 border-emerald-100' : 'bg-amber-50 text-amber-600 border-amber-100'
                                                             }`}>
-                                                                {row.Status}
+                                                                {row.Status || 'N/A'}
                                                             </span>
                                                         </td>
                                                         <td className="p-4">
-                                                            <div className="text-sm font-bold text-slate-800">{row['KPI Task']}</div>
-                                                            <div className="text-[10px] text-slate-400 font-medium">{row['Name Project']}</div>
+                                                            <div className="text-[14px] font-semibold text-slate-800">{row['KPI Task']}</div>
+                                                            {row['Name Project'] && (
+                                                                <div className="inline-flex items-center px-2 py-0.5 mt-1 bg-slate-100 text-slate-500 text-[10px] font-bold rounded uppercase tracking-wide">
+                                                                    📁 {row['Name Project']}
+                                                                </div>
+                                                            )}
                                                         </td>
-                                                        <td className="p-4 text-sm text-slate-600 font-medium">{row.Assignee}</td>
                                                         <td className="p-4">
-                                                            <span className="text-[10px] font-bold text-slate-500 bg-slate-100 px-2 py-1 rounded">
-                                                                {row.Priority}
+                                                            <span className="text-[13px] font-bold text-slate-700">{row.Assignee || 'ไม่ระบุ'}</span>
+                                                        </td>
+                                                        <td className="p-4 text-right pr-6">
+                                                            <span className="text-[11px] font-bold text-slate-400 bg-slate-50 px-2.5 py-1 rounded-md border border-slate-200">
+                                                                {row.Priority || 'NORMAL'}
                                                             </span>
                                                         </td>
                                                     </tr>
