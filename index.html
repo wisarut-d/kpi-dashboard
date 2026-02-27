@@ -3,26 +3,19 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>KPI Task Dashboard</title>
+    <title>KPI Task Dashboard - GitHub Live</title>
     
-    <!-- นำเข้า Tailwind CSS สำหรับจัดการความสวยงาม -->
     <script src="https://cdn.tailwindcss.com"></script>
-    
-    <!-- นำเข้า React และ Babel สำหรับรันโค้ดเบื้องหลัง -->
     <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
     <script src="https://unpkg.com/babel-standalone@6/babel.min.js"></script>
 
-    <!-- นำเข้าไลบรารีสำหรับสร้างกราฟแผนภูมิ (ระบุเวอร์ชันที่เสถียร) -->
     <script src="https://cdn.jsdelivr.net/npm/prop-types@15.8.1/prop-types.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/recharts@2.1.12/umd/Recharts.min.js"></script>
 
-    <!-- นำเข้าฟอนต์ภาษาไทย -->
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;500;600;700&display=swap');
         body { font-family: 'Sarabun', sans-serif; }
-        
-        /* ปรับแต่ง Scrollbar สำหรับส่วนตัวกรอง */
         .custom-scrollbar::-webkit-scrollbar { width: 6px; height: 6px; }
         .custom-scrollbar::-webkit-scrollbar-track { background: #f1f5f9; border-radius: 4px; }
         .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
@@ -34,80 +27,42 @@
 
     <script type="text/babel">
         const { useState, useMemo, useEffect } = React;
-        
-        // ดึงคอมโพเนนต์จาก Recharts พร้อมตั้งค่า Fallback ป้องกันเว็บพังหากโหลดไม่ขึ้น
         const Recharts = window.Recharts || {};
         const { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } = Recharts;
 
-        // --- ชุดไอคอน ---
-        const LayoutList = ({className}) => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><rect width="7" height="7" x="3" y="3" rx="1"/><rect width="7" height="7" x="3" y="14" rx="1"/><path d="M14 4h7"/><path d="M14 9h7"/><path d="M14 15h7"/><path d="M14 20h7"/></svg>;
-        const Upload = ({className}) => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" x2="12" y1="3" y2="15"/></svg>;
-        const ListTodo = ({className}) => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><rect x="3" y="5" width="6" height="6" rx="1"/><path d="m3 17 2 2 4-4"/><path d="M13 6h8"/><path d="M13 12h8"/><path d="M13 18h8"/></svg>;
-        const CheckCircle2 = ({className}) => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10z"/><path d="m9 12 2 2 4-4"/></svg>;
-        const Clock = ({className}) => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>;
-        const AlertCircle = ({className}) => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><circle cx="12" cy="12" r="10"/><line x1="12" x2="12" y1="8" y2="12"/><line x1="12" x2="12.01" y1="16" y2="16"/></svg>;
-        const FilterIcon = ({className}) => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>;
-        const BarChart3 = ({className}) => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M3 3v18h18"/><rect width="4" height="7" x="7" y="10" rx="1"/><rect width="4" height="12" x="15" y="5" rx="1"/></svg>;
-        const PieChartIcon = ({className}) => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M21.21 15.89A10 10 0 1 1 8 2.83"/><path d="M22 12A10 10 0 0 0 12 2v10z"/></svg>;
+        // --- ตั้งค่า GITHUB URL ตรงนี้ ---
+        // เปลี่ยน URL นี้เป็น Raw URL จาก GitHub ของคุณ
+        const GITHUB_CSV_URL = "https://raw.githubusercontent.com/YOUR_USERNAME/YOUR_REPO/main/2025%2010%2020%20KPI%202568_%E0%B8%AA%E0%B8%A8%E0%B8%B2%E0%B8%9B%E0%B8%B1%E0%B8%95%E0%B8%A2%E0%B9%8C.csv";
 
-        // กำหนดหัวข้อตามไฟล์ CSV
         const CSV_HEADERS = [
             'Status', 'Type', 'KPI Task', 'Name Project', 
             'Detail / Note', 'Assignee', 'Deadline', 'Priority', 'Budget'
         ];
 
-        // ชื่อสำหรับแสดงผลในส่วนของ Filter
         const FILTER_LABELS = {
-            'Status': 'สถานะงาน (Status)',
-            'Type': 'ประเภท KPI (KPI Type)',
-            'KPI Task': 'ชื่องาน (KPI Task)',
-            'Name Project': 'โปรเจค (Project)',
-            'Detail / Note': 'รายละเอียด (Detail / Note)',
-            'Assignee': 'ผู้รับผิดชอบ (Assignee)',
-            'Deadline': 'กำหนดส่ง (Deadline)',
-            'Priority': 'ความสำคัญ (Priority)',
-            'Budget': 'งบประมาณ (Budget)'
+            'Status': 'สถานะงาน',
+            'Type': 'ประเภท KPI',
+            'KPI Task': 'ชื่องาน',
+            'Name Project': 'โปรเจค',
+            'Assignee': 'ผู้รับผิดชอบ',
+            'Priority': 'ความสำคัญ'
         };
 
-        // ข้อมูลตัวอย่างเริ่มต้น
-        const defaultCsvData = `Status,Type,KPI Task,Name Project,Detail / Note,Assignee,Deadline,Priority,Budget,,,,,,,,,,,,,,,,,,,
-กำลังดำเนินการ,รางวัล,นักศึกษาได้รับรางวัล / Licence,BUI,,ไปป์,2026/5/15,สำคัญ,,,,,,,,,,,,,,,,,,,,
-กำลังดำเนินการ,รางวัล,นักศึกษาได้รับรางวัล / Licence,,,โบ,2026/5/15,สำคัญ,,,,,,,,,,,,,,,,,,,,
-เสร็จแล้วโว้ย,รางวัล,นักศึกษาได้รับรางวัล / Licence,Bangkok Designweek Academic Program,,เมศ,2026/5/15,สำคัญ,,,,,,,,,,,,,,,,,,,,
-เสร็จแล้วโว้ย,รางวัล,นักศึกษาได้รับรางวัล / Licence,Bangkok Designweek Academic Program,,อู๋,2026/5/15,สำคัญ,,,,,,,,,,,,,,,,,,,,
-กำลังดำเนินการ,รางวัล,นักศึกษาได้รับรางวัล / Licence,,,โม่ง,2026/5/15,สำคัญ,,,,,,,,,,,,,,,,,,,,
-กำลังดำเนินการ,รางวัล,นักศึกษาได้รับรางวัล / Licence,,,อ๋อ,2026/5/15,สำคัญ,,,,,,,,,,,,,,,,,,,,
-เสร็จแล้วโว้ย,รางวัล,นักศึกษาได้รับรางวัล / Licence,Sleep Eat Shit,,พงศ์,2026/5/15,สำคัญ,,,,,,,,,,,,,,,,,,,,
-กำลังดำเนินการ,รางวัล,นักศึกษาได้รับรางวัล / Licence,,,แป้ง,2026/5/15,สำคัญ,,,,,,,,,,,,,,,,,,,,
-กำลังดำเนินการ,ถ่ายคลิป,ถ่ายคลิปของคณะ,ห้องแบบไหน ติดแอร์ยังไงก็ร้อน,บันทึก 21 April,อู๋,2026/4/30,เอาหน่อยวะ,0,,,,,,,,,,,,`;
-
-        // ฟังก์ชันอ่าน CSV แบบรองรับการขึ้นบรรทัดใหม่ใน Cell (Newline in Quotes) 
-        // ช่วยแก้ปัญหาข้อมูลขยะหรือข้อความจาก Note หลุดไปอยู่ผิดคอลัมน์
         const parseCSVFull = (text) => {
             let ret = [], row = [], token = '', inQuotes = false;
             for (let i = 0; i < text.length; i++) {
                 let c = text[i];
                 let nextC = text[i+1];
-                
                 if (c === '"') {
-                    if (inQuotes && nextC === '"') {
-                        token += '"';
-                        i++; // ข้าม quote ถัดไป
-                    } else {
-                        inQuotes = !inQuotes;
-                    }
+                    if (inQuotes && nextC === '"') { token += '"'; i++; } else { inQuotes = !inQuotes; }
                 } else if (c === ',' && !inQuotes) {
-                    row.push(token);
-                    token = '';
+                    row.push(token); token = '';
                 } else if ((c === '\n' || c === '\r') && !inQuotes) {
-                    if (c === '\r' && nextC === '\n') i++; // จัดการ \r\n
+                    if (c === '\r' && nextC === '\n') i++;
                     row.push(token);
                     if (row.some(val => val.trim() !== '')) ret.push(row);
-                    row = [];
-                    token = '';
-                } else {
-                    token += c;
-                }
+                    row = []; token = '';
+                } else { token += c; }
             }
             if (token || row.length > 0) {
                 row.push(token);
@@ -118,387 +73,184 @@
 
         function App() {
             const [data, setData] = useState([]);
-            const [fileName, setFileName] = useState('ตัวอย่างข้อมูลบางส่วน');
-            
-            // สร้าง State สำหรับเก็บค่า Filter ทุกคอลัมน์
-            const initialFilters = CSV_HEADERS.reduce((acc, header) => {
-                acc[header] = 'All';
-                return acc;
-            }, {});
-            
-            const [filters, setFilters] = useState(initialFilters);
+            const [loading, setLoading] = useState(true);
+            const [error, setError] = useState(null);
+            const [filters, setFilters] = useState({});
 
-            const processCSV = (csvText) => {
-                const parsedRows = parseCSVFull(csvText);
-                if (parsedRows.length === 0) return;
-                
-                // ตัดเอาเฉพาะส่วนหัวที่มีชื่อ ไม่เอาคอมม่าเปล่าๆ
-                const headers = parsedRows[0].map(h => h.trim()).filter(h => h !== '');
-                
-                const parsedData = parsedRows.slice(1).map(row => {
-                    const obj = {};
-                    headers.forEach((h, i) => {
-                        obj[h] = row[i] ? row[i].trim() : '';
-                    });
-                    return obj;
-                }).filter(row => row['Status'] || row['KPI Task']); // กรองแถวว่างทิ้ง
+            const fetchDataFromGithub = async () => {
+                setLoading(true);
+                setError(null);
+                try {
+                    // ป้องกันการ Cache โดยการเติม Timestamp ต่อท้าย URL
+                    const response = await fetch(`${GITHUB_CSV_URL}?t=${new Date().getTime()}`);
+                    if (!response.ok) throw new Error("ไม่สามารถดึงข้อมูลจาก GitHub ได้");
+                    const csvText = await response.text();
+                    
+                    const parsedRows = parseCSVFull(csvText);
+                    if (parsedRows.length === 0) return;
+                    
+                    const headersFromCsv = parsedRows[0].map(h => h.trim());
+                    const parsedData = parsedRows.slice(1).map(row => {
+                        const obj = {};
+                        headersFromCsv.forEach((h, i) => { if(h) obj[h] = row[i] ? row[i].trim() : ''; });
+                        return obj;
+                    }).filter(row => row['Status'] || row['KPI Task']);
 
-                setData(parsedData);
+                    setData(parsedData);
+                    setLoading(false);
+                } catch (err) {
+                    setError(err.message);
+                    setLoading(false);
+                }
             };
 
             useEffect(() => {
-                processCSV(defaultCsvData);
+                fetchDataFromGithub();
             }, []);
 
-            const handleFileUpload = (e) => {
-                const file = e.target.files[0];
-                if (file) {
-                    setFileName(file.name);
-                    const reader = new FileReader();
-                    reader.onload = (evt) => {
-                        processCSV(evt.target.result);
-                        setFilters(initialFilters); // ล้างฟิลเตอร์เมื่ออัปโหลดใหม่
-                    };
-                    reader.readAsText(file, 'UTF-8');
-                }
-            };
+            const filterOptions = useMemo(() => {
+                const options = {};
+                CSV_HEADERS.forEach(header => {
+                    let validValues = data.map(d => d[header]).filter(v => v !== undefined && v !== '');
+                    if (header === 'Status') validValues = validValues.filter(v => v.length <= 30 && !v.includes('\n'));
+                    if (header === 'Type') validValues = validValues.filter(v => v.length <= 50 && !v.toLowerCase().includes('vietnam'));
+                    options[header] = ['All', ...new Set(validValues)].sort();
+                });
+                return options;
+            }, [data]);
 
-        // สร้างตัวเลือก (Options) สำหรับทุก Filter อัตโนมัติ
-        const filterOptions = useMemo(() => {
-            const options = {};
-            CSV_HEADERS.forEach(header => {
-                let validValues = data.map(d => d[header]).filter(v => v !== undefined && v !== '');
-                
-                // ป้องกันข้อมูลขยะหรือประโยคยาวๆ หลุดเข้ามาใน Dropdown
-                if (header === 'Status') {
-                    validValues = validValues.filter(v => v.length <= 30 && !v.includes('\n'));
-                }
-                if (header === 'Type') {
-                    validValues = validValues.filter(v => v.length <= 50 && !v.toLowerCase().includes('vietnam') && !v.includes('\n'));
-                }
-
-                const uniqueValues = ['All', ...new Set(validValues)].sort();
-                options[header] = uniqueValues;
-            });
-            return options;
-        }, [data]);
-
-        // กรองข้อมูลตามที่เลือกไว้ทุกคอลัมน์
             const filteredData = useMemo(() => {
                 return data.filter(row => {
                     return CSV_HEADERS.every(header => {
-                        return filters[header] === 'All' || row[header] === filters[header];
+                        return !filters[header] || filters[header] === 'All' || row[header] === filters[header];
                     });
                 });
             }, [data, filters]);
 
-            // คำนวณสถิติภาพรวม
             const stats = useMemo(() => {
                 const total = filteredData.length;
                 const completed = filteredData.filter(d => d['Status'] && d['Status'].includes('เสร็จ')).length;
                 const inProgress = filteredData.filter(d => d['Status'] && d['Status'].includes('กำลังดำเนินการ')).length;
-                const completionRate = total > 0 ? Math.round((completed / total) * 100) : 0;
-                
-                return { total, completed, inProgress, completionRate };
+                return { total, completed, inProgress, completionRate: total > 0 ? Math.round((completed / total) * 100) : 0 };
             }, [filteredData]);
 
-            // เตรียมข้อมูลสำหรับกราฟเปรียบเทียบ (Recharts)
-            const chartData = useMemo(() => {
-                const grouped = {};
-                filteredData.forEach(row => {
-                    const assignee = row['Assignee'] || 'ไม่ระบุตัวตน';
-                    const status = row['Status'] || 'อื่นๆ';
-                    
-                    if (!grouped[assignee]) {
-                        grouped[assignee] = { 
-                            name: assignee, 
-                            'เสร็จแล้ว': 0, 
-                            'กำลังดำเนินการ': 0, 
-                            'อื่นๆ': 0, 
-                            total: 0 
-                        };
-                    }
-                    
-                    grouped[assignee].total += 1;
-                    
-                    if (status.includes('เสร็จ')) grouped[assignee]['เสร็จแล้ว'] += 1;
-                    else if (status.includes('กำลังดำเนินการ')) grouped[assignee]['กำลังดำเนินการ'] += 1;
-                    else grouped[assignee]['อื่นๆ'] += 1;
-                });
-                
-                // เรียงตามจำนวนงานรวมจากมากไปน้อย
-                return Object.values(grouped).sort((a, b) => b.total - a.total);
-            }, [filteredData]);
-
-            // ส่วนจัดการสีของ Status
-            const getStatusColor = (status) => {
-                if (!status) return 'bg-gray-100 text-gray-800';
-                if (status.includes('เสร็จ')) return 'bg-emerald-100 text-emerald-800 border border-emerald-200';
-                if (status.includes('กำลังดำเนินการ')) return 'bg-amber-100 text-amber-800 border border-amber-200';
-                return 'bg-blue-100 text-blue-800 border border-blue-200';
-            };
-
-            // ส่วนสร้างสีให้กราฟ
-            const CustomTooltip = ({ active, payload, label }) => {
-                if (active && payload && payload.length) {
-                    return (
-                        <div className="bg-white p-3 border border-slate-200 shadow-lg rounded-xl">
-                            <p className="font-bold text-slate-800 mb-2">{label}</p>
-                            {payload.map((entry, index) => (
-                                <div key={index} className="flex items-center gap-2 text-sm mb-1">
-                                    <div className="w-3 h-3 rounded-full" style={{ backgroundColor: entry.color }}></div>
-                                    <span className="text-slate-600">{entry.name}:</span>
-                                    <span className="font-semibold text-slate-900">{entry.value} งาน</span>
-                                </div>
-                            ))}
-                            <div className="border-t border-slate-100 mt-2 pt-2 text-sm font-bold text-slate-800">
-                                รวม: {payload.reduce((acc, cur) => acc + cur.value, 0)} งาน
-                            </div>
-                        </div>
-                    );
-                }
-                return null;
-            };
+            if (loading) return (
+                <div className="flex flex-col items-center justify-center min-h-screen bg-slate-50">
+                    <div className="w-12 h-12 border-4 border-indigo-200 border-t-indigo-600 rounded-full animate-spin"></div>
+                    <p className="mt-4 text-slate-600 font-medium">กำลังดึงข้อมูลล่าสุดจาก GitHub...</p>
+                </div>
+            );
 
             return (
-                <div className="min-h-screen bg-slate-50 text-slate-800 font-sans p-4 md:p-8">
+                <div className="min-h-screen bg-slate-50 p-4 md:p-8">
                     <div className="max-w-[1400px] mx-auto space-y-6">
                         
-                        {/* Header & File Upload */}
-                        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
+                        <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 flex flex-col md:flex-row justify-between items-center gap-4">
                             <div>
-                                <h1 className="text-2xl md:text-3xl font-bold text-slate-900 flex items-center gap-2">
-                                    <LayoutList className="w-8 h-8 text-indigo-600" />
-                                    KPI Task Dashboard
-                                </h1>
-                                <p className="text-slate-500 mt-1 flex items-center gap-2">
-                                    <span className="inline-block w-2 h-2 rounded-full bg-emerald-500"></span>
-                                    ข้อมูลปัจจุบัน: <strong className="text-slate-700">{fileName}</strong>
-                                </p>
+                                <h1 className="text-2xl font-bold text-slate-900">KPI Live Dashboard</h1>
+                                <p className="text-sm text-slate-500">ข้อมูลเชื่อมต่อโดยตรงกับไฟล์บน GitHub</p>
                             </div>
-                            
-                            <div className="relative">
-                                <input 
-                                    type="file" 
-                                    accept=".csv" 
-                                    onChange={handleFileUpload} 
-                                    className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-                                />
-                                <button className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-2.5 rounded-xl font-medium transition-colors w-full md:w-auto justify-center shadow-sm">
-                                    <Upload className="w-5 h-5" />
-                                    อัปโหลดไฟล์ CSV ตัวเต็ม
-                                </button>
+                            <button 
+                                onClick={fetchDataFromGithub}
+                                className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-xl text-sm font-medium transition-all shadow-sm flex items-center gap-2"
+                            >
+                                🔄 อัปเดตข้อมูลตอนนี้
+                            </button>
+                        </div>
+
+                        {error && (
+                            <div className="bg-red-50 border border-red-200 text-red-700 p-4 rounded-xl text-sm flex items-center gap-2">
+                                ⚠️ {error} (โปรดตรวจสอบ URL ในโค้ด)
+                            </div>
+                        )}
+
+                        {/* Stats Cards */}
+                        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                            <div className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm">
+                                <p className="text-xs font-bold text-slate-400 uppercase">งานทั้งหมด</p>
+                                <h3 className="text-2xl font-bold text-slate-900">{stats.total}</h3>
+                            </div>
+                            <div className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm">
+                                <p className="text-xs font-bold text-emerald-500 uppercase">เสร็จแล้ว</p>
+                                <h3 className="text-2xl font-bold text-slate-900">{stats.completed}</h3>
+                            </div>
+                            <div className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm">
+                                <p className="text-xs font-bold text-amber-500 uppercase">กำลังทำ</p>
+                                <h3 className="text-2xl font-bold text-slate-900">{stats.inProgress}</h3>
+                            </div>
+                            <div className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm">
+                                <p className="text-xs font-bold text-indigo-500 uppercase">ความสำเร็จ</p>
+                                <h3 className="text-2xl font-bold text-slate-900">{stats.completionRate}%</h3>
                             </div>
                         </div>
 
-                        {/* Overview Stats */}
-                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                            <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 flex items-start gap-4">
-                                <div className="p-3 bg-indigo-100 text-indigo-600 rounded-xl"><ListTodo className="w-6 h-6" /></div>
-                                <div>
-                                    <p className="text-sm font-medium text-slate-500">งานทั้งหมด (ที่กรอง)</p>
-                                    <h3 className="text-3xl font-bold text-slate-900 mt-1">{stats.total}</h3>
-                                </div>
-                            </div>
-                            
-                            <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 flex items-start gap-4">
-                                <div className="p-3 bg-emerald-100 text-emerald-600 rounded-xl"><CheckCircle2 className="w-6 h-6" /></div>
-                                <div>
-                                    <p className="text-sm font-medium text-slate-500">งานที่เสร็จแล้ว</p>
-                                    <h3 className="text-3xl font-bold text-slate-900 mt-1">{stats.completed}</h3>
-                                </div>
-                            </div>
-                            
-                            <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 flex items-start gap-4">
-                                <div className="p-3 bg-amber-100 text-amber-600 rounded-xl"><Clock className="w-6 h-6" /></div>
-                                <div>
-                                    <p className="text-sm font-medium text-slate-500">กำลังดำเนินการ</p>
-                                    <h3 className="text-3xl font-bold text-slate-900 mt-1">{stats.inProgress}</h3>
-                                </div>
-                            </div>
-                            
-                            <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 flex items-start gap-4">
-                                <div className="p-3 bg-blue-100 text-blue-600 rounded-xl"><AlertCircle className="w-6 h-6" /></div>
-                                <div className="w-full">
-                                    <p className="text-sm font-medium text-slate-500">ความคืบหน้าภาพรวม</p>
-                                    <div className="flex items-end justify-between mt-1">
-                                        <h3 className="text-3xl font-bold text-slate-900">{stats.completionRate}%</h3>
-                                    </div>
-                                    <div className="w-full bg-slate-100 h-2 rounded-full mt-2 overflow-hidden">
-                                        <div className="bg-blue-500 h-full rounded-full transition-all duration-500" style={{ width: `${stats.completionRate}%` }}></div>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-
-                        {/* Main Content Layout */}
                         <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
-                            
-                            {/* Left Column: All Filters */}
-                            <div className="lg:col-span-1">
-                                <div className="bg-white p-5 rounded-2xl shadow-sm border border-slate-100 sticky top-6 max-h-[calc(100vh-2rem)] flex flex-col">
-                                    <div className="flex items-center justify-between mb-4">
-                                        <h3 className="text-lg font-bold text-slate-900 flex items-center gap-2">
-                                            <FilterIcon className="w-5 h-5 text-slate-400" />
-                                            ตัวกรองทั้งหมด
-                                        </h3>
-                                        <button 
-                                            onClick={() => setFilters(initialFilters)}
-                                            className="text-xs font-semibold text-indigo-600 hover:text-indigo-800 bg-indigo-50 px-2 py-1 rounded-md transition-colors"
-                                        >
-                                            ล้างค่า
-                                        </button>
-                                    </div>
-                                    
-                                    <div className="space-y-4 overflow-y-auto custom-scrollbar pr-2 flex-1 pb-4">
-                                        {CSV_HEADERS.map(header => (
-                                            <div key={header}>
-                                                <label className="block text-sm font-medium text-slate-700 mb-1">
-                                                    {FILTER_LABELS[header] || header}
-                                                </label>
-                                                <select 
-                                                    className="w-full bg-slate-50 border border-slate-200 text-slate-900 text-sm rounded-xl focus:ring-indigo-500 focus:border-indigo-500 block p-2.5 outline-none transition-colors cursor-pointer"
-                                                    value={filters[header] || 'All'}
-                                                    onChange={(e) => setFilters({...filters, [header]: e.target.value})}
-                                                >
-                                                    {filterOptions[header] && filterOptions[header].map(opt => (
-                                                        <option key={opt} value={opt}>
-                                                            {opt === 'All' ? 'แสดงทั้งหมด' : (opt || '(ว่าง)')}
-                                                        </option>
-                                                    ))}
-                                                </select>
-                                            </div>
-                                        ))}
-                                    </div>
+                            {/* Filter Side */}
+                            <div className="lg:col-span-1 space-y-4">
+                                <div className="bg-white p-5 rounded-2xl shadow-sm border border-slate-100 overflow-y-auto max-h-[80vh] custom-scrollbar">
+                                    <h3 className="font-bold mb-4 text-slate-800">ตัวกรองข้อมูล</h3>
+                                    {Object.keys(FILTER_LABELS).map(header => (
+                                        <div key={header} className="mb-4">
+                                            <label className="text-xs font-bold text-slate-500 mb-1 block">{FILTER_LABELS[header]}</label>
+                                            <select 
+                                                className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2 text-sm outline-none"
+                                                value={filters[header] || 'All'}
+                                                onChange={(e) => setFilters({...filters, [header]: e.target.value})}
+                                            >
+                                                {filterOptions[header] && filterOptions[header].map(opt => (
+                                                    <option key={opt} value={opt}>{opt === 'All' ? '-- ทั้งหมด --' : opt}</option>
+                                                ))}
+                                            </select>
+                                        </div>
+                                    ))}
+                                    <button 
+                                        onClick={() => setFilters({})}
+                                        className="w-full py-2 text-sm text-indigo-600 font-bold bg-indigo-50 rounded-lg hover:bg-indigo-100"
+                                    >
+                                        ล้างตัวกรอง
+                                    </button>
                                 </div>
                             </div>
 
-                            {/* Right Column: Charts & Data Table */}
-                            <div className="lg:col-span-3 space-y-6 flex flex-col min-h-0">
-                                
-                                {/* Chart Section */}
-                                <div className="bg-white p-5 rounded-2xl shadow-sm border border-slate-100">
-                                    <h3 className="text-lg font-bold text-slate-900 mb-6 flex items-center gap-2">
-                                        <PieChartIcon className="w-5 h-5 text-slate-400" />
-                                        แผนภูมิเปรียบเทียบภาระงานรายบุคคล (Workload & Status)
-                                    </h3>
-                                    
-                                    <div className="h-[300px] w-full">
-                                        {chartData.length > 0 ? (
-                                            BarChart ? (
-                                                <ResponsiveContainer width="100%" height="100%">
-                                                    <BarChart data={chartData} margin={{ top: 5, right: 30, left: 0, bottom: 5 }}>
-                                                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
-                                                        <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fill: '#64748b', fontSize: 12}} dy={10} />
-                                                        <YAxis axisLine={false} tickLine={false} tick={{fill: '#64748b', fontSize: 12}} />
-                                                        <Tooltip content={<CustomTooltip />} cursor={{fill: '#f8fafc'}} />
-                                                        <Legend wrapperStyle={{ paddingTop: '20px' }} />
-                                                        {/* แสดงกราฟแท่งแบบซ้อนกัน (Stacked Bar) */}
-                                                        <Bar dataKey="เสร็จแล้ว" stackId="a" fill="#10b981" radius={[0, 0, 4, 4]} />
-                                                        <Bar dataKey="กำลังดำเนินการ" stackId="a" fill="#f59e0b" />
-                                                        <Bar dataKey="อื่นๆ" stackId="a" fill="#3b82f6" radius={[4, 4, 0, 0]} />
-                                                    </BarChart>
-                                                </ResponsiveContainer>
-                                            ) : (
-                                                <div className="h-full flex items-center justify-center text-slate-400 text-sm">ไม่สามารถโหลดไลบรารีกราฟได้ โปรดตรวจสอบการเชื่อมต่ออินเทอร์เน็ต</div>
-                                            )
-                                        ) : (
-                                            <div className="h-full flex items-center justify-center text-slate-400 text-sm">ไม่มีข้อมูลสำหรับการสร้างแผนภูมิ</div>
-                                        )}
-                                    </div>
-                                </div>
-
-                                {/* Table Section */}
-                                <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden flex flex-col flex-1">
-                                    <div className="p-5 border-b border-slate-100 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-slate-50/50">
-                                        <h3 className="text-lg font-bold text-slate-900 flex items-center gap-2">
-                                            <BarChart3 className="w-5 h-5 text-indigo-500" />
-                                            ตารางข้อมูล ({filteredData.length} รายการ)
-                                        </h3>
-                                    </div>
-                                    
-                                    <div className="overflow-x-auto flex-1 custom-scrollbar">
-                                        <table className="w-full text-left border-collapse whitespace-nowrap min-w-[1000px]">
+                            {/* Data Table Side */}
+                            <div className="lg:col-span-3">
+                                <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
+                                    <div className="overflow-x-auto custom-scrollbar">
+                                        <table className="w-full text-left border-collapse min-w-[800px]">
                                             <thead>
-                                                <tr className="bg-slate-100/80 text-slate-600 text-xs uppercase tracking-wider">
-                                                    <th className="p-4 font-semibold rounded-tl-lg">Status</th>
-                                                    <th className="p-4 font-semibold">KPI Type</th>
-                                                    <th className="p-4 font-semibold">KPI Task / Project</th>
-                                                    <th className="p-4 font-semibold">Detail / Note</th>
-                                                    <th className="p-4 font-semibold">Assignee</th>
-                                                    <th className="p-4 font-semibold">Deadline</th>
-                                                    <th className="p-4 font-semibold">Priority</th>
-                                                    <th className="p-4 font-semibold rounded-tr-lg">Budget</th>
+                                                <tr className="bg-slate-50 text-slate-500 text-[10px] uppercase font-bold tracking-widest border-b border-slate-100">
+                                                    <th className="p-4">Status</th>
+                                                    <th className="p-4">ชื่องาน / โปรเจค</th>
+                                                    <th className="p-4">ผู้รับผิดชอบ</th>
+                                                    <th className="p-4">ความสำคัญ</th>
                                                 </tr>
                                             </thead>
-                                            <tbody className="divide-y divide-slate-100">
-                                                {filteredData.length > 0 ? (
-                                                    filteredData.map((row, idx) => (
-                                                        <tr key={idx} className="hover:bg-indigo-50/30 transition-colors group">
-                                                            <td className="p-4">
-                                                                <span className={`px-3 py-1.5 text-xs font-semibold rounded-full inline-block border ${getStatusColor(row['Status'])}`}>
-                                                                    {row['Status'] || 'ไม่ระบุ'}
-                                                                </span>
-                                                            </td>
-                                                            <td className="p-4 text-sm font-medium text-slate-600">
-                                                                {row['Type'] || '-'}
-                                                            </td>
-                                                            <td className="p-4 min-w-[280px]">
-                                                                <div className="font-bold text-slate-800 whitespace-normal line-clamp-2 leading-snug">
-                                                                    {row['KPI Task'] || '-'}
-                                                                </div>
-                                                                <div className="text-xs text-indigo-600 font-medium mt-1 flex items-center gap-1 bg-indigo-50 inline-block px-2 py-0.5 rounded">
-                                                                    {row['Name Project'] || 'ไม่มีโปรเจค'}
-                                                                </div>
-                                                            </td>
-                                                            <td className="p-4 text-sm text-slate-500 whitespace-normal min-w-[200px] max-w-[300px] truncate group-hover:whitespace-normal">
-                                                                {row['Detail / Note'] || '-'}
-                                                            </td>
-                                                            <td className="p-4">
-                                                                <div className="flex items-center gap-2">
-                                                                    <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-indigo-500 to-purple-500 text-white flex items-center justify-center text-xs font-bold shadow-sm">
-                                                                        {(row['Assignee'] || '?').substring(0, 2)}
-                                                                    </div>
-                                                                    <span className="font-semibold text-slate-700">{row['Assignee'] || '-'}</span>
-                                                                </div>
-                                                            </td>
-                                                            <td className="p-4 text-sm text-slate-600 font-medium">
-                                                                {row['Deadline'] || '-'}
-                                                            </td>
-                                                            <td className="p-4">
-                                                                <span className="text-xs font-bold text-slate-600 bg-slate-100 px-3 py-1.5 rounded-lg border border-slate-200">
-                                                                    {row['Priority'] || '-'}
-                                                                </span>
-                                                            </td>
-                                                            <td className="p-4 text-sm font-medium text-slate-700">
-                                                                {row['Budget'] || '-'}
-                                                            </td>
-                                                        </tr>
-                                                    ))
-                                                ) : (
-                                                    <tr>
-                                                        <td colSpan="8" className="p-12 text-center text-slate-500 bg-slate-50/50">
-                                                            <div className="flex flex-col items-center justify-center gap-3">
-                                                                <div className="w-16 h-16 bg-white rounded-full flex items-center justify-center shadow-sm">
-                                                                    <FilterIcon className="w-8 h-8 text-slate-300" />
-                                                                </div>
-                                                                <p className="text-lg font-bold text-slate-700">ไม่พบข้อมูลที่ตรงกับเงื่อนไข</p>
-                                                                <p className="text-sm">ลองปรับเปลี่ยนตัวกรองทางด้านซ้าย หรืออัปโหลดไฟล์ใหม่</p>
-                                                                <button 
-                                                                    onClick={() => setFilters(initialFilters)}
-                                                                    className="mt-2 text-sm font-semibold text-indigo-600 hover:text-indigo-800 underline underline-offset-4"
-                                                                >
-                                                                    ล้างตัวกรองทั้งหมด
-                                                                </button>
-                                                            </div>
+                                            <tbody className="divide-y divide-slate-50">
+                                                {filteredData.map((row, idx) => (
+                                                    <tr key={idx} className="hover:bg-slate-50/50 transition-colors">
+                                                        <td className="p-4">
+                                                            <span className={`px-2 py-1 rounded-md text-[10px] font-bold border ${
+                                                                row.Status.includes('เสร็จ') ? 'bg-emerald-50 text-emerald-600 border-emerald-100' : 'bg-amber-50 text-amber-600 border-amber-100'
+                                                            }`}>
+                                                                {row.Status}
+                                                            </span>
+                                                        </td>
+                                                        <td className="p-4">
+                                                            <div className="text-sm font-bold text-slate-800">{row['KPI Task']}</div>
+                                                            <div className="text-[10px] text-slate-400 font-medium">{row['Name Project']}</div>
+                                                        </td>
+                                                        <td className="p-4 text-sm text-slate-600 font-medium">{row.Assignee}</td>
+                                                        <td className="p-4">
+                                                            <span className="text-[10px] font-bold text-slate-500 bg-slate-100 px-2 py-1 rounded">
+                                                                {row.Priority}
+                                                            </span>
                                                         </td>
                                                     </tr>
-                                                )}
+                                                ))}
                                             </tbody>
                                         </table>
                                     </div>
                                 </div>
-                                
                             </div>
                         </div>
                     </div>
